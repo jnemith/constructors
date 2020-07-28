@@ -2,10 +2,12 @@ use cgmath::Deg;
 use shaderc::{Compiler, ShaderKind};
 use std::io::Cursor;
 use std::time::Duration;
+use wgpu_glyph::{Section, Text};
 use winit::event::*;
 
 use super::camera::{Camera, Projection};
 use super::object::{Object, Vertex};
+use super::txt::Txt;
 use super::Uniforms;
 use crate::player::Player;
 
@@ -18,6 +20,8 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 pub struct Graphics {
+    pub size: winit::dpi::PhysicalSize<u32>,
+
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub vertex_buffer: wgpu::Buffer,
@@ -31,11 +35,14 @@ pub struct Graphics {
     pub player: Player,
     pub projection: Projection,
 
+    pub txt: Txt,
+
     pub render_pipeline: wgpu::RenderPipeline,
 }
 
 impl Graphics {
     pub fn new(
+        size: winit::dpi::PhysicalSize<u32>,
         device: wgpu::Device,
         queue: wgpu::Queue,
         sc_desc: &wgpu::SwapChainDescriptor,
@@ -142,7 +149,10 @@ impl Graphics {
 
         let num_indices = obj.indices.len() as u32;
 
+        let txt = Txt::new(String::from("x: y: z: "), &device);
+
         Self {
+            size,
             device,
             queue,
             vertex_buffer,
@@ -153,6 +163,7 @@ impl Graphics {
             uniform_bind_group,
             player,
             projection,
+            txt,
             render_pipeline,
         }
     }
@@ -160,7 +171,7 @@ impl Graphics {
     pub fn handle_input(&mut self, event: &WindowEvent, width: u32, height: u32) -> bool {
         match event {
             WindowEvent::KeyboardInput {
-                device_id,
+                device_id: _,
                 input:
                     KeyboardInput {
                         state,
@@ -202,15 +213,18 @@ impl Graphics {
         );
 
         self.queue.submit(&[encoder.finish()]);
+        self.txt.update_debug(&self.player);
     }
-    pub fn render(&self, swap_chain: &mut wgpu::SwapChain) {
+    pub fn render(&mut self, swap_chain: &mut wgpu::SwapChain) {
         let frame = swap_chain
             .get_next_texture()
             .expect("Failed to acquire next swap chain texture");
 
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Redraw"),
+            });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -220,9 +234,9 @@ impl Graphics {
                     load_op: wgpu::LoadOp::Clear,
                     store_op: wgpu::StoreOp::Store,
                     clear_color: wgpu::Color {
-                        r: 0.1,
-                        g: 0.1,
-                        b: 0.2,
+                        r: 0.4,
+                        g: 0.4,
+                        b: 0.5,
                         a: 1.0,
                     },
                 }],
@@ -234,6 +248,25 @@ impl Graphics {
             render_pass.set_index_buffer(&self.index_buffer, 0, 0);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
+
+        // Text rendering
+        self.txt.glyph_brush.queue(Section {
+            screen_position: (5.0, 5.0),
+            bounds: (self.size.width as f32, self.size.height as f32),
+            text: vec![Text::new(&self.txt.debug_text[..])],
+            ..Section::default()
+        });
+
+        self.txt
+            .glyph_brush
+            .draw_queued(
+                &self.device,
+                &mut encoder,
+                &frame.view,
+                self.size.width,
+                self.size.height,
+            )
+            .expect("Draw queued");
 
         self.queue.submit(&[encoder.finish()]);
     }

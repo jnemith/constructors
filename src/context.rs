@@ -51,7 +51,7 @@ impl Context {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
         log::info!("Initializing Graphics");
-        let graphics = Graphics::new(device, queue, &sc_desc);
+        let graphics = Graphics::new(size, device, queue, &sc_desc);
 
         Self {
             size,

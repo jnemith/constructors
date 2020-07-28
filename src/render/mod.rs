@@ -1,6 +1,7 @@
 pub mod camera;
 pub mod graphics;
 pub mod object;
+pub mod txt;
 
 use cgmath::prelude::Zero;
 use cgmath::{Matrix4, SquareMatrix, Vector4};
