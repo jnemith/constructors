@@ -4,7 +4,7 @@ mod render;
 
 use futures::executor::block_on;
 use winit::{
-    dpi::{LogicalPosition, PhysicalPosition},
+    dpi::{PhysicalPosition, PhysicalSize},
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -18,7 +18,8 @@ fn main() {
     log::info!("Building window");
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title("Constructor")
+        .with_title("Constructors")
+        .with_inner_size(PhysicalSize::new(1280, 720))
         .build(&event_loop)
         .unwrap();
 
@@ -28,6 +29,7 @@ fn main() {
     let mut context = block_on(Context::new(&window));
 
     let mut last_time = std::time::Instant::now();
+    let mut focused = true;
     log::info!("Begin loop");
     event_loop.run(move |event, _, control_flow| {
         *control_flow = if cfg!(feature = "metal-auto-capture") {
@@ -41,8 +43,9 @@ fn main() {
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-                if !context.input(event) {
+                if !context.input(event, focused) {
                     match event {
+                        WindowEvent::Focused(b) => focused = *b,
                         WindowEvent::Resized(physical_size) => {
                             context.resize(*physical_size);
                         }
@@ -50,7 +53,7 @@ fn main() {
                             context.resize(**new_inner_size);
                         }
 
-                        WindowEvent::CursorMoved { .. } => {
+                        WindowEvent::CursorMoved { .. } if focused => {
                             window
                                 .set_cursor_position(PhysicalPosition::new(
                                     context.size.width as f32 / 2.0,

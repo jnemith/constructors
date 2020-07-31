@@ -77,7 +77,10 @@ impl Context {
             .create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
+    pub fn input(&mut self, event: &WindowEvent, focused: bool) -> bool {
+        if !focused {
+            return false;
+        }
         match event {
             _ => self
                 .graphics
