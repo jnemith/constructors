@@ -4,6 +4,8 @@ use super::{BlockMeshUniforms, Vertex};
 
 const SIZE_MAX: u8 = 10;
 const SIZE_MIN: u8 = 1;
+const LOCAL_POS_MIN: i8 = -9;
+const LOCAL_POS_MAX: i8 = 9;
 
 const INDEX_DATA: &[u16] = &[
     0, 1, 2, 2, 3, 0, // top
@@ -103,11 +105,9 @@ impl BlockComponent {
     }
 
     pub fn build(l: f32, h: f32, w: f32, color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        let local_pos = Vector3::new(
-            clamp(local_pos.x, SIZE_MIN as i8 - 1, SIZE_MAX as i8 - 1) as f32 / SIZE_MAX as f32,
-            clamp(local_pos.y, SIZE_MIN as i8 - 1, SIZE_MAX as i8 - 1) as f32 / SIZE_MAX as f32,
-            clamp(local_pos.z, SIZE_MIN as i8 - 1, SIZE_MAX as i8 - 1) as f32 / SIZE_MAX as f32,
-        );
+        let local_pos =
+            local_pos.map(|p| clamp(p, LOCAL_POS_MIN, LOCAL_POS_MAX) as f32 / SIZE_MAX as f32);
+
         let color: [f32; 3] = color.into();
         let v_data = [
             // Top
@@ -158,12 +158,12 @@ impl BlockComponent {
         Self::with_scale(SIZE_MIN, color, local_pos)
     }
 
-    pub fn with_dimensions(l: u8, h: u8, w: u8, color: Vector3<f32>, local_pos: Vector3<i8>) {
-        let l = clamp(l, SIZE_MIN, SIZE_MAX) as f32;
-        let h = clamp(h, SIZE_MIN, SIZE_MAX) as f32;
-        let w = clamp(w, SIZE_MIN, SIZE_MAX) as f32;
-        Self::build(l, w, h, color, local_pos);
-    }
+    // pub fn with_dimensions(l: u8, h: u8, w: u8, color: Vector3<f32>, local_pos: Vector3<i8>) {
+    //     let l = clamp(l, SIZE_MIN, SIZE_MAX) as f32;
+    //     let h = clamp(h, SIZE_MIN, SIZE_MAX) as f32;
+    //     let w = clamp(w, SIZE_MIN, SIZE_MAX) as f32;
+    //     Self::build(l, w, h, color, local_pos);
+    // }
 }
 
 impl BlockVertex {
