@@ -1,14 +1,14 @@
-use cgmath::Deg;
+use cgmath::{Deg, Vector3};
 use shaderc::{Compiler, ShaderKind};
 use std::io::Cursor;
 use std::time::Duration;
 use wgpu_glyph::{Section, Text};
 use winit::event::*;
 
+use super::block::{Block, BlockComponent, BlockVertex, DrawBlock};
 use super::camera::{Camera, Projection};
-use super::object::{Object, Vertex};
 use super::txt::Txt;
-use super::Uniforms;
+use super::{Uniforms, Vertex};
 use crate::player::Player;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -24,9 +24,6 @@ pub struct Graphics {
 
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_indices: u32,
 
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
@@ -35,6 +32,7 @@ pub struct Graphics {
     pub player: Player,
     pub projection: Projection,
 
+    block: Block,
     pub txt: Txt,
 
     pub render_pipeline: wgpu::RenderPipeline,
@@ -61,7 +59,6 @@ impl Graphics {
 
         let vs_data = wgpu::read_spirv(Cursor::new(vs_spirv.as_binary_u8())).unwrap();
         let fs_data = wgpu::read_spirv(Cursor::new(fs_spirv.as_binary_u8())).unwrap();
-
         let vs_module = device.create_shader_module(&vs_data);
         let fs_module = device.create_shader_module(&fs_data);
 
@@ -70,14 +67,21 @@ impl Graphics {
         let player = Player::new(camera);
         let projection = Projection::new(sc_desc.width, sc_desc.height, Deg(45.0), 0.1, 100.0);
 
-        // Initialize object data
-        let obj = Object::build_vertices();
-        let vertex_buffer = device.create_buffer_with_data(
-            bytemuck::cast_slice(&obj.vertices),
-            wgpu::BufferUsage::VERTEX,
-        );
-        let index_buffer = device
-            .create_buffer_with_data(bytemuck::cast_slice(&obj.indices), wgpu::BufferUsage::INDEX);
+        // Initialize cube data
+        let obj =
+            BlockComponent::with_scale(10, Vector3::new(0.2, 0.3, 0.9), Vector3::new(0, 3, 0));
+
+        let position_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                bindings: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::VERTEX,
+                    ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                }],
+                label: Some("position_bind_group_layout"),
+            });
+
+        let block = Block::new(&[obj], &device, &position_bind_group_layout);
 
         let mut uniforms = Uniforms::new();
         uniforms.update_camera(&player.camera, &projection);
@@ -110,7 +114,7 @@ impl Graphics {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&uniform_bind_group_layout],
+            bind_group_layouts: &[&uniform_bind_group_layout, &position_bind_group_layout],
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -140,14 +144,12 @@ impl Graphics {
             depth_stencil_state: None,
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[Vertex::desc()],
+                vertex_buffers: &[BlockVertex::desc()],
             },
             sample_count: 1,
             sample_mask: 10,
             alpha_to_coverage_enabled: false,
         });
-
-        let num_indices = obj.indices.len() as u32;
 
         let txt = Txt::new(String::from("x: y: z: "), &device);
 
@@ -155,14 +157,12 @@ impl Graphics {
             size,
             device,
             queue,
-            vertex_buffer,
-            index_buffer,
-            num_indices,
             uniforms,
             uniform_buffer,
             uniform_bind_group,
             player,
             projection,
+            block,
             txt,
             render_pipeline,
         }
@@ -243,10 +243,7 @@ impl Graphics {
                 depth_stencil_attachment: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, &self.vertex_buffer, 0, 0);
-            render_pass.set_index_buffer(&self.index_buffer, 0, 0);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_block(&self.block, &self.uniform_bind_group);
         }
 
         // Text rendering
