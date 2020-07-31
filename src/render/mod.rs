@@ -1,6 +1,7 @@
 pub mod block;
 pub mod camera;
 pub mod graphics;
+pub mod texture;
 pub mod txt;
 
 use cgmath::prelude::Zero;

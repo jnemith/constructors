@@ -1,6 +1,6 @@
 use winit::{event::WindowEvent, window::Window};
 
-use crate::render::graphics::Graphics;
+use crate::render::{graphics::Graphics, texture::Texture};
 
 pub struct Context {
     pub size: winit::dpi::PhysicalSize<u32>,
@@ -75,6 +75,9 @@ impl Context {
             .graphics
             .device
             .create_swap_chain(&self.surface, &self.sc_desc);
+
+        self.graphics.depth_texture =
+            Texture::create_depth_texture(&self.graphics.device, &self.sc_desc, "depth_texture");
     }
 
     pub fn input(&mut self, event: &WindowEvent, focused: bool) -> bool {

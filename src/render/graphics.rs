@@ -7,6 +7,7 @@ use winit::event::*;
 
 use super::block::{Block, BlockComponent, BlockVertex, DrawBlock};
 use super::camera::{Camera, Projection};
+use super::texture::Texture;
 use super::txt::Txt;
 use super::{Uniforms, Vertex};
 use crate::player::Player;
@@ -28,6 +29,8 @@ pub struct Graphics {
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+
+    pub depth_texture: Texture,
 
     pub player: Player,
     pub projection: Projection,
@@ -68,8 +71,16 @@ impl Graphics {
         let projection = Projection::new(sc_desc.width, sc_desc.height, Deg(45.0), 0.1, 100.0);
 
         // Initialize cube data
-        let obj =
-            BlockComponent::with_scale(10, Vector3::new(0.2, 0.3, 0.9), Vector3::new(0, 3, 0));
+        let mut objs = Vec::new();
+        let obj5 =
+            BlockComponent::with_scale(1, Vector3::new(0.1, 0.9, 0.1), Vector3::new(0, 3, 0));
+        let obj6 =
+            BlockComponent::with_scale(1, Vector3::new(0.9, 0.9, 0.1), Vector3::new(9, 3, 0));
+        let obj4 =
+            BlockComponent::with_scale(10, Vector3::new(0.9, 0.3, 0.2), Vector3::new(0, 3, 0));
+        objs.push(obj4);
+        objs.push(obj5);
+        objs.push(obj6);
 
         let position_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -81,7 +92,7 @@ impl Graphics {
                 label: Some("position_bind_group_layout"),
             });
 
-        let block = Block::new(&[obj], &device, &position_bind_group_layout);
+        let block = Block::new(&objs, &device, &position_bind_group_layout);
 
         let mut uniforms = Uniforms::new();
         uniforms.update_camera(&player.camera, &projection);
@@ -113,6 +124,8 @@ impl Graphics {
             label: Some("uniform_bind_group_layout"),
         });
 
+        let depth_texture = Texture::create_depth_texture(&device, &sc_desc, "depth_texture");
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&uniform_bind_group_layout, &position_bind_group_layout],
         });
@@ -141,7 +154,15 @@ impl Graphics {
                 write_mask: wgpu::ColorWrite::ALL,
             }],
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            depth_stencil_state: None,
+            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil_read_mask: 0,
+                stencil_write_mask: 0,
+            }),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[BlockVertex::desc()],
@@ -160,6 +181,7 @@ impl Graphics {
             uniforms,
             uniform_buffer,
             uniform_bind_group,
+            depth_texture,
             player,
             projection,
             block,
@@ -240,7 +262,15 @@ impl Graphics {
                         a: 1.0,
                     },
                 }],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                    attachment: &self.depth_texture.view,
+                    depth_load_op: wgpu::LoadOp::Clear,
+                    depth_store_op: wgpu::StoreOp::Store,
+                    clear_depth: 1.0,
+                    stencil_load_op: wgpu::LoadOp::Clear,
+                    stencil_store_op: wgpu::StoreOp::Store,
+                    clear_stencil: 0,
+                }),
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.draw_block(&self.block, &self.uniform_bind_group);
