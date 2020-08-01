@@ -104,66 +104,63 @@ impl BlockComponent {
         }
     }
 
-    pub fn build(l: f32, h: f32, w: f32, color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        let local_pos =
-            local_pos.map(|p| clamp(p, LOCAL_POS_MIN, LOCAL_POS_MAX) as f32 / SIZE_MAX as f32);
+    pub fn build(scale: u8, color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
+        let scale = clamp(scale, SIZE_MIN, SIZE_MAX);
 
+        let local_pos = local_pos.map(|p| {
+            clamp(
+                p,
+                LOCAL_POS_MIN + (scale as i8 - 1),
+                LOCAL_POS_MAX - (scale as i8 - 1),
+            ) as f32
+                / SIZE_MAX as f32
+        });
+
+        let s = scale as f32;
         let color: [f32; 3] = color.into();
         let v_data = [
             // Top
-            BlockVertex::new([-l, -h, w], color, [0.0, 0.0, 1.0]),
-            BlockVertex::new([l, -h, w], color, [0.0, 0.0, 1.0]),
-            BlockVertex::new([l, h, w], color, [0.0, 0.0, 1.0]),
-            BlockVertex::new([-l, h, w], color, [0.0, 0.0, 1.0]),
+            BlockVertex::new([-s, -s, s], color, [0.0, 0.0, 1.0]),
+            BlockVertex::new([s, -s, s], color, [0.0, 0.0, 1.0]),
+            BlockVertex::new([s, s, s], color, [0.0, 0.0, 1.0]),
+            BlockVertex::new([-s, s, s], color, [0.0, 0.0, 1.0]),
             // Bottom
-            BlockVertex::new([-l, h, -w], color, [0.0, 0.0, -1.0]),
-            BlockVertex::new([l, h, -w], color, [0.0, 0.0, -1.0]),
-            BlockVertex::new([l, -h, -w], color, [0.0, 0.0, -1.0]),
-            BlockVertex::new([-l, -h, -w], color, [0.0, 0.0, -1.0]),
-            // Right
-            BlockVertex::new([l, -h, -w], color, [1.0, 0.0, 0.0]),
-            BlockVertex::new([l, h, -w], color, [1.0, 0.0, 0.0]),
-            BlockVertex::new([l, h, w], color, [1.0, 0.0, 0.0]),
-            BlockVertex::new([l, -h, w], color, [1.0, 0.0, 0.0]),
+            BlockVertex::new([-s, s, -s], color, [0.0, 0.0, -1.0]),
+            BlockVertex::new([s, s, -s], color, [0.0, 0.0, -1.0]),
+            BlockVertex::new([s, -s, -s], color, [0.0, 0.0, -1.0]),
+            BlockVertex::new([-s, -s, -s], color, [0.0, 0.0, -1.0]),
+            // Rigst
+            BlockVertex::new([s, -s, -s], color, [1.0, 0.0, 0.0]),
+            BlockVertex::new([s, s, -s], color, [1.0, 0.0, 0.0]),
+            BlockVertex::new([s, s, s], color, [1.0, 0.0, 0.0]),
+            BlockVertex::new([s, -s, s], color, [1.0, 0.0, 0.0]),
             // Left
-            BlockVertex::new([-l, -h, w], color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new([-l, h, w], color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new([-l, h, -w], color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new([-l, -h, -w], color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new([-s, -s, s], color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new([-s, s, s], color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new([-s, s, -s], color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new([-s, -s, -s], color, [-1.0, 0.0, 0.0]),
             // Front
-            BlockVertex::new([l, h, -w], color, [0.0, 1.0, 0.0]),
-            BlockVertex::new([-l, h, -w], color, [0.0, 1.0, 0.0]),
-            BlockVertex::new([-l, h, w], color, [0.0, 1.0, 0.0]),
-            BlockVertex::new([l, h, w], color, [0.0, 1.0, 0.0]),
+            BlockVertex::new([s, s, -s], color, [0.0, 1.0, 0.0]),
+            BlockVertex::new([-s, s, -s], color, [0.0, 1.0, 0.0]),
+            BlockVertex::new([-s, s, s], color, [0.0, 1.0, 0.0]),
+            BlockVertex::new([s, s, s], color, [0.0, 1.0, 0.0]),
             // Back
-            BlockVertex::new([l, -h, w], color, [0.0, -1.0, 0.0]),
-            BlockVertex::new([-l, -h, w], color, [0.0, -1.0, 0.0]),
-            BlockVertex::new([-l, -h, -w], color, [0.0, -1.0, 0.0]),
-            BlockVertex::new([l, -h, -w], color, [0.0, -1.0, 0.0]),
+            BlockVertex::new([s, -s, s], color, [0.0, -1.0, 0.0]),
+            BlockVertex::new([-s, -s, s], color, [0.0, -1.0, 0.0]),
+            BlockVertex::new([-s, -s, -s], color, [0.0, -1.0, 0.0]),
+            BlockVertex::new([s, -s, -s], color, [0.0, -1.0, 0.0]),
         ];
 
         Self::new(v_data.to_vec(), INDEX_DATA.to_vec(), local_pos)
     }
 
-    pub fn with_scale(scale: u8, color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        let scale = clamp(scale, SIZE_MIN, SIZE_MAX) as f32;
-        Self::build(scale, scale, scale, color, local_pos)
-    }
-
     pub fn max(color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        Self::with_scale(SIZE_MAX, color, local_pos)
+        Self::build(SIZE_MAX, color, local_pos)
     }
 
     pub fn min(color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        Self::with_scale(SIZE_MIN, color, local_pos)
+        Self::build(SIZE_MIN, color, local_pos)
     }
-
-    // pub fn with_dimensions(l: u8, h: u8, w: u8, color: Vector3<f32>, local_pos: Vector3<i8>) {
-    //     let l = clamp(l, SIZE_MIN, SIZE_MAX) as f32;
-    //     let h = clamp(h, SIZE_MIN, SIZE_MAX) as f32;
-    //     let w = clamp(w, SIZE_MIN, SIZE_MAX) as f32;
-    //     Self::build(l, w, h, color, local_pos);
-    // }
 }
 
 impl BlockVertex {

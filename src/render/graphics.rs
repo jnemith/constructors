@@ -71,16 +71,7 @@ impl Graphics {
         let projection = Projection::new(sc_desc.width, sc_desc.height, Deg(45.0), 0.1, 100.0);
 
         // Initialize cube data
-        let mut objs = Vec::new();
-        let obj5 =
-            BlockComponent::with_scale(1, Vector3::new(0.1, 0.9, 0.1), Vector3::new(0, 3, 0));
-        let obj6 =
-            BlockComponent::with_scale(1, Vector3::new(0.9, 0.9, 0.1), Vector3::new(9, 3, 0));
-        let obj4 =
-            BlockComponent::with_scale(10, Vector3::new(0.9, 0.3, 0.2), Vector3::new(0, 3, 0));
-        objs.push(obj4);
-        objs.push(obj5);
-        objs.push(obj6);
+        let obj = BlockComponent::build(10, Vector3::new(0.9, 0.3, 0.2), Vector3::new(0, 0, 0));
 
         let position_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -92,7 +83,7 @@ impl Graphics {
                 label: Some("position_bind_group_layout"),
             });
 
-        let block = Block::new(&objs, &device, &position_bind_group_layout);
+        let block = Block::new(&[obj], &device, &position_bind_group_layout);
 
         let mut uniforms = Uniforms::new();
         uniforms.update_camera(&player.camera, &projection);
