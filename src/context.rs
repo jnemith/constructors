@@ -1,22 +1,26 @@
+use cgmath::Deg;
+use std::collections::HashMap;
+use std::time::Duration;
 use winit::{event::WindowEvent, window::Window};
 
-use crate::render::{graphics::Graphics, texture::Texture};
+use crate::render::{
+    camera::{Camera, Projection},
+    graphics::{Graphics, Render},
+};
+use crate::{player::Player, world::World};
 
 pub struct Context {
     pub size: winit::dpi::PhysicalSize<u32>,
 
     surface: wgpu::Surface,
-    adapter: wgpu::Adapter,
-    pub sc_desc: wgpu::SwapChainDescriptor,
-    pub swap_chain: wgpu::SwapChain,
+    graphics: Graphics,
 
-    pub graphics: Graphics,
+    world: World,
 }
 
 impl Context {
     pub async fn new(window: &Window) -> Self {
-        // Initialize wgpu
-        log::info!("Initializing Wgpu");
+        log::info!("Initializing Context");
         let size = window.inner_size();
         let surface = wgpu::Surface::create(window);
 
@@ -51,33 +55,32 @@ impl Context {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
         log::info!("Initializing Graphics");
-        let graphics = Graphics::new(size, device, queue, &sc_desc);
+        let graphics = Graphics::new(size, adapter, sc_desc, swap_chain, device, queue);
+
+        let camera = Camera::new((0.0, 3.0, 5.0), Deg(-90.0), Deg(-10.0));
+        let projection = Projection::new(
+            graphics.sc_desc.width,
+            graphics.sc_desc.height,
+            Deg(45.0),
+            0.1,
+            100.0,
+        );
+        let player = Player::new(camera);
+
+        log::info!("Initializing world");
+        let world = World::new(player, projection, HashMap::new(), &graphics);
 
         Self {
             size,
             surface,
-            adapter,
-            sc_desc,
-            swap_chain,
             graphics,
+            world,
         }
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.graphics
-            .projection
-            .resize(new_size.width, new_size.height);
-
-        self.size = new_size;
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
-        self.swap_chain = self
-            .graphics
-            .device
-            .create_swap_chain(&self.surface, &self.sc_desc);
-
-        self.graphics.depth_texture =
-            Texture::create_depth_texture(&self.graphics.device, &self.sc_desc, "depth_texture");
+        self.graphics.resize(new_size, &self.surface);
+        self.world.resize(new_size, &self.graphics);
     }
 
     pub fn input(&mut self, event: &WindowEvent, focused: bool) -> bool {
@@ -86,8 +89,16 @@ impl Context {
         }
         match event {
             _ => self
-                .graphics
+                .world
                 .handle_input(event, self.size.width, self.size.height),
         }
+    }
+
+    pub fn update(&mut self, dt: Duration) {
+        self.world.update(dt, &self.graphics);
+    }
+
+    pub fn render(&mut self) {
+        self.world.render(&mut self.graphics);
     }
 }

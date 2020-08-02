@@ -1,6 +1,7 @@
 mod context;
 mod player;
 mod render;
+mod world;
 
 use futures::executor::block_on;
 use winit::{
@@ -85,8 +86,8 @@ fn main() {
                 let now = std::time::Instant::now();
                 let dt = now - last_time;
                 last_time = now;
-                context.graphics.update(dt);
-                context.graphics.render(&mut context.swap_chain);
+                context.update(dt);
+                context.render();
             }
             _ => {}
         }
