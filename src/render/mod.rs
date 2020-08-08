@@ -5,7 +5,7 @@ pub mod texture;
 pub mod txt;
 
 use cgmath::prelude::Zero;
-use cgmath::{Matrix4, SquareMatrix, Vector3, Vector4};
+use cgmath::{Matrix4, SquareMatrix, Vector4};
 
 use camera::{Camera, Projection};
 
@@ -22,14 +22,6 @@ pub struct Uniforms {
 unsafe impl bytemuck::Pod for Uniforms {}
 unsafe impl bytemuck::Zeroable for Uniforms {}
 
-#[derive(Copy, Clone)]
-pub struct BlockMeshUniforms {
-    position: Vector3<f32>,
-}
-
-unsafe impl bytemuck::Pod for BlockMeshUniforms {}
-unsafe impl bytemuck::Zeroable for BlockMeshUniforms {}
-
 impl Uniforms {
     pub fn new() -> Self {
         Self {
@@ -41,14 +33,5 @@ impl Uniforms {
     pub fn update_camera(&mut self, camera: &Camera, projection: &Projection) {
         self.view_position = camera.position.to_homogeneous();
         self.view_proj = projection.build_matrix() * camera.build_matrix();
-    }
-}
-
-impl BlockMeshUniforms {
-    pub fn new(position: &Vector3<f32>) -> Self {
-        let fposition = Vector3::new(position.x as f32, position.y as f32, position.z as f32);
-        Self {
-            position: fposition,
-        }
     }
 }

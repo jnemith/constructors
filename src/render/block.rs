@@ -1,13 +1,11 @@
 use cgmath::Vector3;
 
-use super::{BlockMeshUniforms, Vertex};
+use super::Vertex;
 
-const SIZE_MAX: u8 = 10;
-const SIZE_MIN: u8 = 1;
-const LOCAL_POS_MIN: i8 = -9;
-const LOCAL_POS_MAX: i8 = 9;
+const CHUNK_SIZE: usize = 16;
+const CHUNK_3D_SIZE: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
-const INDEX_DATA: &[u16] = &[
+const INDEX_DATA: &[u32] = &[
     0, 1, 2, 2, 3, 0, // top
     4, 5, 6, 6, 7, 4, // bottom
     8, 9, 10, 10, 11, 8, // right
@@ -27,149 +25,157 @@ pub struct BlockVertex {
 unsafe impl bytemuck::Pod for BlockVertex {}
 unsafe impl bytemuck::Zeroable for BlockVertex {}
 
-pub struct BlockComponent {
-    pub vertices: Vec<BlockVertex>,
-    pub indices: Vec<u16>,
-    pub local_pos: Vector3<f32>,
+#[derive(Copy, Clone)]
+pub struct Block {
+    id: usize,
+    is_active: bool,
+    // pub vertices: Vec<BlockVertex>,
+    // pub indices: Vec<u32>,
 }
 
-pub struct BlockMesh {
+pub struct ChunkMesh {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub position_buffer: wgpu::Buffer,
-    pub position_bind_group: wgpu::BindGroup,
     pub num_elements: u32,
 }
-pub struct Block {
-    // model: Matrix4<f32>,
-    pub meshes: Vec<BlockMesh>,
+
+pub struct Chunk {
+    id: usize,
+    pub position: Vector3<i32>,
+    pub is_active: bool,
+    pub blocks: [Option<Block>; CHUNK_3D_SIZE],
+    pub mesh: Option<ChunkMesh>,
+}
+
+impl Chunk {
+    pub fn new(id: usize, position: Vector3<i32>) -> Self {
+        let blocks: [Option<Block>; CHUNK_3D_SIZE] = [None; CHUNK_3D_SIZE];
+        Self {
+            id,
+            position,
+            is_active: true,
+            blocks,
+            mesh: None,
+        }
+    }
+
+    pub fn build_mesh(
+        &self,
+        // blocks: &[Option<Block>; CHUNK_3D_SIZE],
+        device: &wgpu::Device,
+    ) -> Option<ChunkMesh> {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        let mut offset: u32 = 0;
+        for (i, block) in self.blocks.iter().enumerate() {
+            if let Some(b) = block {
+                if !b.is_active {
+                    continue;
+                }
+
+                let z = (i % CHUNK_SIZE) as i32;
+                let y = ((i / CHUNK_SIZE) % CHUNK_SIZE) as i32;
+                let x = (i / (CHUNK_SIZE * CHUNK_SIZE)) as i32;
+
+                let chunk_pos = self.position * CHUNK_SIZE as i32;
+                let (mut v_data, mut i_data) = Block::build(
+                    (0.4, 0.0, 0.0).into(),
+                    (x + chunk_pos.x, y + chunk_pos.y, z + chunk_pos.z).into(),
+                );
+
+                for val in &mut i_data {
+                    *val += offset as u32;
+                }
+
+                vertices.append(&mut v_data);
+                indices.append(&mut i_data);
+
+                offset += 24;
+            }
+        }
+
+        if vertices.is_empty() || indices.is_empty() {
+            return None;
+        }
+
+        let vertex_buffer = device
+            .create_buffer_with_data(bytemuck::cast_slice(&vertices), wgpu::BufferUsage::VERTEX);
+        let index_buffer = device
+            .create_buffer_with_data(bytemuck::cast_slice(&indices), wgpu::BufferUsage::INDEX);
+
+        Some(ChunkMesh {
+            vertex_buffer,
+            index_buffer,
+            num_elements: indices.len() as u32,
+        })
+    }
+
+    pub fn insert_block(&mut self, block: Block, x: usize, y: usize, z: usize) {
+        let limit = CHUNK_SIZE - 1;
+        if x <= limit && y <= limit && z <= limit {
+            let index = ((x * CHUNK_SIZE + y) * CHUNK_SIZE) + z;
+            if self.blocks[index].is_none() {
+                self.blocks[index] = Some(block);
+            }
+        }
+    }
 }
 
 impl Block {
-    pub fn new(
-        components: &[BlockComponent],
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-    ) -> Self {
-        let mut meshes = Vec::new();
-
-        for bc in components.iter() {
-            let vertex_buffer = device.create_buffer_with_data(
-                bytemuck::cast_slice(&bc.vertices),
-                wgpu::BufferUsage::VERTEX,
-            );
-            let index_buffer = device.create_buffer_with_data(
-                bytemuck::cast_slice(&bc.indices),
-                wgpu::BufferUsage::INDEX,
-            );
-
-            let position_data = BlockMeshUniforms::new(&bc.local_pos);
-            let position_buffer = device.create_buffer_with_data(
-                bytemuck::cast_slice(&[position_data]),
-                wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            );
-
-            let position_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &layout,
-                bindings: &[wgpu::Binding {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: &position_buffer,
-                        range: 0..std::mem::size_of_val(&position_data) as wgpu::BufferAddress,
-                    },
-                }],
-                label: Some("position_bind_group"),
-            });
-
-            meshes.push(BlockMesh {
-                vertex_buffer,
-                index_buffer,
-                position_buffer,
-                position_bind_group,
-                num_elements: bc.indices.len() as u32,
-            });
-        }
-
-        Self { meshes }
-    }
-}
-
-#[allow(dead_code)]
-impl BlockComponent {
-    pub fn new(vertices: Vec<BlockVertex>, indices: Vec<u16>, local_pos: Vector3<f32>) -> Self {
+    pub fn new(id: usize) -> Self {
         Self {
-            vertices,
-            indices,
-            local_pos,
+            id,
+            is_active: true,
         }
     }
 
-    pub fn build(scale: u8, color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        let scale = clamp(scale, SIZE_MIN, SIZE_MAX);
-
-        let local_pos = local_pos.map(|p| {
-            clamp(
-                p,
-                LOCAL_POS_MIN + (scale as i8 - 1),
-                LOCAL_POS_MAX - (scale as i8 - 1),
-            ) as f32
-                / SIZE_MAX as f32
-        });
-
-        let s = scale as f32;
+    pub fn build(color: Vector3<f32>, position: Vector3<i32>) -> (Vec<BlockVertex>, Vec<u32>) {
+        let s = 1.0 / 2.0;
         let color: [f32; 3] = color.into();
         let v_data = [
             // Top
-            BlockVertex::new([-s, -s, s], color, [0.0, 0.0, 1.0]),
-            BlockVertex::new([s, -s, s], color, [0.0, 0.0, 1.0]),
-            BlockVertex::new([s, s, s], color, [0.0, 0.0, 1.0]),
-            BlockVertex::new([-s, s, s], color, [0.0, 0.0, 1.0]),
+            BlockVertex::new([-s, -s, s], color, [0.0, 0.0, 1.0], position),
+            BlockVertex::new([s, -s, s], color, [0.0, 0.0, 1.0], position),
+            BlockVertex::new([s, s, s], color, [0.0, 0.0, 1.0], position),
+            BlockVertex::new([-s, s, s], color, [0.0, 0.0, 1.0], position),
             // Bottom
-            BlockVertex::new([-s, s, -s], color, [0.0, 0.0, -1.0]),
-            BlockVertex::new([s, s, -s], color, [0.0, 0.0, -1.0]),
-            BlockVertex::new([s, -s, -s], color, [0.0, 0.0, -1.0]),
-            BlockVertex::new([-s, -s, -s], color, [0.0, 0.0, -1.0]),
+            BlockVertex::new([-s, s, -s], color, [0.0, 0.0, -1.0], position),
+            BlockVertex::new([s, s, -s], color, [0.0, 0.0, -1.0], position),
+            BlockVertex::new([s, -s, -s], color, [0.0, 0.0, -1.0], position),
+            BlockVertex::new([-s, -s, -s], color, [0.0, 0.0, -1.0], position),
             // Rigst
-            BlockVertex::new([s, -s, -s], color, [1.0, 0.0, 0.0]),
-            BlockVertex::new([s, s, -s], color, [1.0, 0.0, 0.0]),
-            BlockVertex::new([s, s, s], color, [1.0, 0.0, 0.0]),
-            BlockVertex::new([s, -s, s], color, [1.0, 0.0, 0.0]),
+            BlockVertex::new([s, -s, -s], color, [1.0, 0.0, 0.0], position),
+            BlockVertex::new([s, s, -s], color, [1.0, 0.0, 0.0], position),
+            BlockVertex::new([s, s, s], color, [1.0, 0.0, 0.0], position),
+            BlockVertex::new([s, -s, s], color, [1.0, 0.0, 0.0], position),
             // Left
-            BlockVertex::new([-s, -s, s], color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new([-s, s, s], color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new([-s, s, -s], color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new([-s, -s, -s], color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new([-s, -s, s], color, [-1.0, 0.0, 0.0], position),
+            BlockVertex::new([-s, s, s], color, [-1.0, 0.0, 0.0], position),
+            BlockVertex::new([-s, s, -s], color, [-1.0, 0.0, 0.0], position),
+            BlockVertex::new([-s, -s, -s], color, [-1.0, 0.0, 0.0], position),
             // Front
-            BlockVertex::new([s, s, -s], color, [0.0, 1.0, 0.0]),
-            BlockVertex::new([-s, s, -s], color, [0.0, 1.0, 0.0]),
-            BlockVertex::new([-s, s, s], color, [0.0, 1.0, 0.0]),
-            BlockVertex::new([s, s, s], color, [0.0, 1.0, 0.0]),
+            BlockVertex::new([s, s, -s], color, [0.0, 1.0, 0.0], position),
+            BlockVertex::new([-s, s, -s], color, [0.0, 1.0, 0.0], position),
+            BlockVertex::new([-s, s, s], color, [0.0, 1.0, 0.0], position),
+            BlockVertex::new([s, s, s], color, [0.0, 1.0, 0.0], position),
             // Back
-            BlockVertex::new([s, -s, s], color, [0.0, -1.0, 0.0]),
-            BlockVertex::new([-s, -s, s], color, [0.0, -1.0, 0.0]),
-            BlockVertex::new([-s, -s, -s], color, [0.0, -1.0, 0.0]),
-            BlockVertex::new([s, -s, -s], color, [0.0, -1.0, 0.0]),
+            BlockVertex::new([s, -s, s], color, [0.0, -1.0, 0.0], position),
+            BlockVertex::new([-s, -s, s], color, [0.0, -1.0, 0.0], position),
+            BlockVertex::new([-s, -s, -s], color, [0.0, -1.0, 0.0], position),
+            BlockVertex::new([s, -s, -s], color, [0.0, -1.0, 0.0], position),
         ];
 
-        Self::new(v_data.to_vec(), INDEX_DATA.to_vec(), local_pos)
-    }
-
-    pub fn max(color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        Self::build(SIZE_MAX, color, local_pos)
-    }
-
-    pub fn min(color: Vector3<f32>, local_pos: Vector3<i8>) -> Self {
-        Self::build(SIZE_MIN, color, local_pos)
+        (v_data.to_vec(), INDEX_DATA.to_vec())
     }
 }
 
 impl BlockVertex {
-    pub fn new(position: [f32; 3], color: [f32; 3], normal: [f32; 3]) -> Self {
-        let denom = SIZE_MAX as f32;
+    pub fn new(position: [f32; 3], color: [f32; 3], normal: [f32; 3], p: Vector3<i32>) -> Self {
         let position = [
-            position[0] / denom,
-            position[1] / denom,
-            position[2] / denom,
+            position[0] + p.x as f32,
+            position[1] + p.y as f32,
+            position[2] + p.z as f32,
         ];
         BlockVertex {
             position,
@@ -210,32 +216,34 @@ pub trait DrawBlock<'a, 'b>
 where
     'b: 'a,
 {
-    fn draw_mesh(&mut self, block_mesh: &'b BlockMesh, uniforms: &'b wgpu::BindGroup);
-    fn draw_block(&mut self, block: &'b Block, uniforms: &'b wgpu::BindGroup);
+    fn draw_mesh(&mut self, chunk_mesh: &'b ChunkMesh, uniforms: &'b wgpu::BindGroup);
+    fn draw_chunk(&mut self, chunk: &'b Chunk, uniforms: &'b wgpu::BindGroup);
 }
 
 impl<'a, 'b> DrawBlock<'a, 'b> for wgpu::RenderPass<'a>
 where
     'b: 'a,
 {
-    fn draw_mesh(&mut self, block_mesh: &'b BlockMesh, uniforms: &'b wgpu::BindGroup) {
-        self.set_vertex_buffer(0, &block_mesh.vertex_buffer, 0, 0);
-        self.set_index_buffer(&block_mesh.index_buffer, 0, 0);
+    fn draw_mesh(&mut self, chunk_mesh: &'b ChunkMesh, uniforms: &'b wgpu::BindGroup) {
+        self.set_vertex_buffer(0, &chunk_mesh.vertex_buffer, 0, 0);
+        self.set_index_buffer(&chunk_mesh.index_buffer, 0, 0);
         self.set_bind_group(0, &uniforms, &[]);
-        self.set_bind_group(1, &block_mesh.position_bind_group, &[]);
-        self.draw_indexed(0..block_mesh.num_elements, 0, 0..1);
+        self.draw_indexed(0..chunk_mesh.num_elements, 0, 0..1);
     }
 
-    fn draw_block(&mut self, block: &'b Block, uniforms: &'b wgpu::BindGroup) {
-        for mesh in &block.meshes {
-            self.draw_mesh(mesh, uniforms);
+    fn draw_chunk(&mut self, chunk: &'b Chunk, uniforms: &'b wgpu::BindGroup) {
+        if !chunk.is_active {
+            return;
+        }
+        if let Some(mesh) = &chunk.mesh {
+            self.draw_mesh(&mesh, uniforms);
         }
     }
 }
 
-fn clamp<N>(num: N, min: N, max: N) -> N
-where
-    N: std::cmp::Ord,
-{
-    num.min(max).max(min)
-}
+// fn clamp<N>(num: N, min: N, max: N) -> N
+// where
+//     N: std::cmp::Ord,
+// {
+//     num.min(max).max(min)
+// }

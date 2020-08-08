@@ -1,5 +1,4 @@
 use cgmath::Deg;
-use std::collections::HashMap;
 use std::time::Duration;
 use winit::{event::WindowEvent, window::Window};
 
@@ -68,7 +67,7 @@ impl Context {
         let player = Player::new(camera);
 
         log::info!("Initializing world");
-        let world = World::new(player, projection, HashMap::new(), &graphics);
+        let world = World::new(player, projection, &graphics);
 
         Self {
             size,

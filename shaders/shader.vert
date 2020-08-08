@@ -13,14 +13,8 @@ uniform Uniforms {
     mat4 u_view_proj;
 };
 
-layout(set=1, binding=0)
-uniform Block {
-    vec3 b_position;
-};
-
 void main() {
     v_color = a_color;
     v_normal = a_normal;
-    vec3 pos = a_position + b_position;
-    gl_Position = u_view_proj * vec4(pos, 1.0);
+    gl_Position = u_view_proj * vec4(a_position, 1.0);
 }

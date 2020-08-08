@@ -1,12 +1,10 @@
-use cgmath::Vector3;
-use std::collections::HashMap;
 use std::time::Duration;
 use wgpu_glyph::{Section, Text};
 use winit::event::{KeyboardInput, WindowEvent};
 
 use crate::player::Player;
 use crate::render::{
-    block::{Block, BlockComponent, BlockVertex, DrawBlock},
+    block::{Block, BlockVertex, Chunk, DrawBlock},
     camera::Projection,
     graphics::{Graphics, Render},
     texture::Texture,
@@ -14,12 +12,9 @@ use crate::render::{
     Uniforms, Vertex,
 };
 
-type Blocks = HashMap<(u32, u32, u32), Block>;
-
 pub struct World {
     player: Player,
-    block: Block,
-    blocks: Blocks,
+    chunks: Vec<Chunk>,
     text: Txt,
     projection: Projection,
 
@@ -33,12 +28,7 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(
-        player: Player,
-        projection: Projection,
-        blocks: Blocks,
-        graphics: &Graphics,
-    ) -> Self {
+    pub fn new(player: Player, projection: Projection, graphics: &Graphics) -> Self {
         let mut uniforms = Uniforms::new();
         uniforms.update_camera(&player.camera, &projection);
 
@@ -73,21 +63,22 @@ impl World {
                 label: Some("uniform_bind_group_layout"),
             });
 
-        let obj = BlockComponent::build(10, Vector3::new(0.9, 0.3, 0.2), Vector3::new(0, 0, 0));
-
-        let position_bind_group_layout =
-            graphics
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    bindings: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX,
-                        ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-                    }],
-                    label: Some("position_bind_group_layout"),
-                });
-
-        let block = Block::new(&[obj], &graphics.device, &position_bind_group_layout);
+        let block = Block::new(0);
+        let mut chunks = Vec::new();
+        let mut chunk = Chunk::new(0, (0, 0, 0).into());
+        let mut chunk2 = Chunk::new(0, (0, -2, 0).into());
+        for i in 0..16 {
+            for j in 0..16 {
+                for k in 0..16 {
+                    chunk.insert_block(block, i, j, k);
+                    chunk2.insert_block(block, i, j, k);
+                }
+            }
+        }
+        chunk.mesh = chunk.build_mesh(&graphics.device);
+        chunk2.mesh = chunk2.build_mesh(&graphics.device);
+        chunks.push(chunk);
+        chunks.push(chunk2);
 
         let vs_src = include_str!("../shaders/shader.vert");
         let fs_src = include_str!("../shaders/shader.frag");
@@ -95,7 +86,7 @@ impl World {
             graphics
                 .device
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    bind_group_layouts: &[&uniform_bind_group_layout, &position_bind_group_layout],
+                    bind_group_layouts: &[&uniform_bind_group_layout],
                 });
 
         let pipeline = graphics.create_render_pipeline(
@@ -113,8 +104,7 @@ impl World {
 
         Self {
             player,
-            block,
-            blocks,
+            chunks,
             text,
             projection,
             depth_texture,
@@ -219,7 +209,8 @@ impl Render for World {
                 }),
             });
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.draw_block(&self.block, &self.uniform_bind_group);
+            render_pass.draw_chunk(&self.chunks[0], &self.uniform_bind_group);
+            render_pass.draw_chunk(&self.chunks[1], &self.uniform_bind_group);
         }
 
         // Text rendering
