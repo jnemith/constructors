@@ -1,5 +1,6 @@
 pub mod block;
 pub mod camera;
+pub mod chunk;
 pub mod graphics;
 pub mod texture;
 pub mod txt;
