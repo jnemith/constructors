@@ -29,8 +29,6 @@ unsafe impl bytemuck::Zeroable for BlockVertex {}
 pub struct Block {
     id: usize,
     is_active: bool,
-    // pub vertices: Vec<BlockVertex>,
-    // pub indices: Vec<u32>,
 }
 
 pub struct ChunkMesh {
@@ -59,11 +57,7 @@ impl Chunk {
         }
     }
 
-    pub fn build_mesh(
-        &self,
-        // blocks: &[Option<Block>; CHUNK_3D_SIZE],
-        device: &wgpu::Device,
-    ) -> Option<ChunkMesh> {
+    pub fn build_mesh(&self, device: &wgpu::Device) -> Option<ChunkMesh> {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -133,37 +127,48 @@ impl Block {
     pub fn build(color: Vector3<f32>, position: Vector3<i32>) -> (Vec<BlockVertex>, Vec<u32>) {
         let s = 1.0 / 2.0;
         let color: [f32; 3] = color.into();
+
+        let position = Vector3::new(position.x as f32, position.y as f32, position.z as f32);
+        let pos1 = [position.x - s, position.y - s, position.z + s];
+        let pos2 = [position.x + s, position.y - s, position.z + s];
+        let pos3 = [position.x - s, position.y + s, position.z + s];
+        let pos4 = [position.x + s, position.y + s, position.z + s];
+        let pos5 = [position.x - s, position.y - s, position.z - s];
+        let pos6 = [position.x + s, position.y - s, position.z - s];
+        let pos7 = [position.x - s, position.y + s, position.z - s];
+        let pos8 = [position.x + s, position.y + s, position.z - s];
+
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         let v_data = [
-            // Top
-            BlockVertex::new([-s, -s, s], color, [0.0, 0.0, 1.0], position),
-            BlockVertex::new([s, -s, s], color, [0.0, 0.0, 1.0], position),
-            BlockVertex::new([s, s, s], color, [0.0, 0.0, 1.0], position),
-            BlockVertex::new([-s, s, s], color, [0.0, 0.0, 1.0], position),
-            // Bottom
-            BlockVertex::new([-s, s, -s], color, [0.0, 0.0, -1.0], position),
-            BlockVertex::new([s, s, -s], color, [0.0, 0.0, -1.0], position),
-            BlockVertex::new([s, -s, -s], color, [0.0, 0.0, -1.0], position),
-            BlockVertex::new([-s, -s, -s], color, [0.0, 0.0, -1.0], position),
-            // Rigst
-            BlockVertex::new([s, -s, -s], color, [1.0, 0.0, 0.0], position),
-            BlockVertex::new([s, s, -s], color, [1.0, 0.0, 0.0], position),
-            BlockVertex::new([s, s, s], color, [1.0, 0.0, 0.0], position),
-            BlockVertex::new([s, -s, s], color, [1.0, 0.0, 0.0], position),
-            // Left
-            BlockVertex::new([-s, -s, s], color, [-1.0, 0.0, 0.0], position),
-            BlockVertex::new([-s, s, s], color, [-1.0, 0.0, 0.0], position),
-            BlockVertex::new([-s, s, -s], color, [-1.0, 0.0, 0.0], position),
-            BlockVertex::new([-s, -s, -s], color, [-1.0, 0.0, 0.0], position),
-            // Front
-            BlockVertex::new([s, s, -s], color, [0.0, 1.0, 0.0], position),
-            BlockVertex::new([-s, s, -s], color, [0.0, 1.0, 0.0], position),
-            BlockVertex::new([-s, s, s], color, [0.0, 1.0, 0.0], position),
-            BlockVertex::new([s, s, s], color, [0.0, 1.0, 0.0], position),
-            // Back
-            BlockVertex::new([s, -s, s], color, [0.0, -1.0, 0.0], position),
-            BlockVertex::new([-s, -s, s], color, [0.0, -1.0, 0.0], position),
-            BlockVertex::new([-s, -s, -s], color, [0.0, -1.0, 0.0], position),
-            BlockVertex::new([s, -s, -s], color, [0.0, -1.0, 0.0], position),
+            BlockVertex::new(pos1, color, [0.0, 0.0, 1.0]),
+            BlockVertex::new(pos2, color, [0.0, 0.0, 1.0]),
+            BlockVertex::new(pos4, color, [0.0, 0.0, 1.0]),
+            BlockVertex::new(pos3, color, [0.0, 0.0, 1.0]),
+
+            BlockVertex::new(pos7, color, [0.0, 0.0, -1.0]),
+            BlockVertex::new(pos8, color, [0.0, 0.0, -1.0]),
+            BlockVertex::new(pos6, color, [0.0, 0.0, -1.0]),
+            BlockVertex::new(pos5, color, [0.0, 0.0, -1.0]),
+
+            BlockVertex::new(pos6, color, [1.0, 0.0, 0.0]),
+            BlockVertex::new(pos8, color, [1.0, 0.0, 0.0]),
+            BlockVertex::new(pos4, color, [1.0, 0.0, 0.0]),
+            BlockVertex::new(pos2, color, [1.0, 0.0, 0.0]),
+
+            BlockVertex::new(pos1, color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new(pos3, color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new(pos7, color, [-1.0, 0.0, 0.0]),
+            BlockVertex::new(pos5, color, [-1.0, 0.0, 0.0]),
+
+            BlockVertex::new(pos8, color, [0.0, 1.0, 0.0]),
+            BlockVertex::new(pos7, color, [0.0, 1.0, 0.0]),
+            BlockVertex::new(pos3, color, [0.0, 1.0, 0.0]),
+            BlockVertex::new(pos4, color, [0.0, 1.0, 0.0]),
+
+            BlockVertex::new(pos2, color, [0.0, -1.0, 0.0]),
+            BlockVertex::new(pos1, color, [0.0, -1.0, 0.0]),
+            BlockVertex::new(pos5, color, [0.0, -1.0, 0.0]),
+            BlockVertex::new(pos6, color, [0.0, -1.0, 0.0]),
         ];
 
         (v_data.to_vec(), INDEX_DATA.to_vec())
@@ -171,12 +176,7 @@ impl Block {
 }
 
 impl BlockVertex {
-    pub fn new(position: [f32; 3], color: [f32; 3], normal: [f32; 3], p: Vector3<i32>) -> Self {
-        let position = [
-            position[0] + p.x as f32,
-            position[1] + p.y as f32,
-            position[2] + p.z as f32,
-        ];
+    pub fn new(position: [f32; 3], color: [f32; 3], normal: [f32; 3]) -> Self {
         BlockVertex {
             position,
             color,
