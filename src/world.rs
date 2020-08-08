@@ -209,8 +209,7 @@ impl Render for World {
                 }),
             });
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.draw_chunk(&self.chunks[0], &self.uniform_bind_group);
-            render_pass.draw_chunk(&self.chunks[1], &self.uniform_bind_group);
+            render_pass.draw_chunks(&self.chunks, &self.uniform_bind_group);
         }
 
         // Text rendering

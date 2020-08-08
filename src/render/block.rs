@@ -217,7 +217,7 @@ where
     'b: 'a,
 {
     fn draw_mesh(&mut self, chunk_mesh: &'b ChunkMesh, uniforms: &'b wgpu::BindGroup);
-    fn draw_chunk(&mut self, chunk: &'b Chunk, uniforms: &'b wgpu::BindGroup);
+    fn draw_chunks(&mut self, chunks: &'b Vec<Chunk>, uniforms: &'b wgpu::BindGroup);
 }
 
 impl<'a, 'b> DrawBlock<'a, 'b> for wgpu::RenderPass<'a>
@@ -231,12 +231,14 @@ where
         self.draw_indexed(0..chunk_mesh.num_elements, 0, 0..1);
     }
 
-    fn draw_chunk(&mut self, chunk: &'b Chunk, uniforms: &'b wgpu::BindGroup) {
-        if !chunk.is_active {
-            return;
-        }
-        if let Some(mesh) = &chunk.mesh {
-            self.draw_mesh(&mesh, uniforms);
+    fn draw_chunks(&mut self, chunks: &'b Vec<Chunk>, uniforms: &'b wgpu::BindGroup) {
+        for chunk in chunks {
+            if !chunk.is_active {
+                continue;
+            }
+            if let Some(mesh) = &chunk.mesh {
+                self.draw_mesh(&mesh, uniforms);
+            }
         }
     }
 }
