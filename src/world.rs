@@ -6,7 +6,7 @@ use crate::player::Player;
 use crate::render::{
     block::{Block, BlockVertex},
     camera::Projection,
-    chunk::{Chunk, DrawBlock},
+    chunk::{Chunk, ChunkManager, DrawBlock},
     graphics::{Graphics, Render},
     texture::Texture,
     txt::Txt,
@@ -15,7 +15,7 @@ use crate::render::{
 
 pub struct World {
     player: Player,
-    chunks: Vec<Chunk>,
+    chunks: ChunkManager,
     text: Txt,
     projection: Projection,
 
@@ -64,30 +64,13 @@ impl World {
                 label: Some("uniform_bind_group_layout"),
             });
 
-        let block = Block::new(0);
-        let mut chunks = Vec::new();
-        let mut chunk = Chunk::new(0, (0, 0, 0).into());
-        let mut chunk2 = Chunk::new(255, (0, -2, 2).into());
-        let mut chunk3 = Chunk::new(128, (0, -1, 1).into());
-        let mut small_chunk = Chunk::new(56, (1, 0, 0).into());
-        for i in 0..16 {
-            for j in 0..16 {
-                for k in 0..16 {
-                    chunk.insert_block(block, i, j, k);
-                    chunk2.insert_block(block, i, j, k);
-                    chunk3.insert_block(block, i, j, k);
-                }
-            }
-        }
-        small_chunk.insert_block(block, 15, 5, 0);
-        chunk.mesh = chunk.build_mesh(&graphics.device);
-        chunk2.mesh = chunk2.build_mesh(&graphics.device);
-        chunk3.mesh = chunk3.build_mesh(&graphics.device);
-        small_chunk.mesh = small_chunk.build_mesh(&graphics.device);
-        chunks.push(chunk);
-        chunks.push(chunk2);
-        chunks.push(chunk3);
-        chunks.push(small_chunk);
+        let mut block_chunk = Chunk::new(0, (0, 0, 0).into());
+        block_chunk.insert_block(Block::new(0), (7, 3, 7).into());
+        block_chunk.insert_block(Block::new(0), (8, 3, 7).into());
+        block_chunk.insert_block(Block::new(0), (6, 3, 7).into());
+        block_chunk.build_mesh(&graphics.device);
+        let mut chunks = ChunkManager::default(&graphics.device);
+        chunks.add_chunk(block_chunk);
 
         let vs_src = include_str!("../shaders/shader.vert");
         let fs_src = include_str!("../shaders/shader.frag");

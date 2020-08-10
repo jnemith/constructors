@@ -1,4 +1,5 @@
 use cgmath::Vector3;
+use std::collections::HashSet;
 
 use super::Vertex;
 
@@ -22,6 +23,16 @@ pub struct BlockVertex {
 unsafe impl bytemuck::Pod for BlockVertex {}
 unsafe impl bytemuck::Zeroable for BlockVertex {}
 
+#[derive(PartialEq, Eq, Hash)]
+pub enum BlockFace {
+    North,  // Positive-X
+    South,  // Negative-X
+    Top,    // Positive-Y
+    Bottom, // Negative-Y
+    East,   // Positive-Z
+    West,   // Negative-Z
+}
+
 #[derive(Copy, Clone)]
 pub struct Block {
     id: usize,
@@ -36,7 +47,11 @@ impl Block {
         }
     }
 
-    pub fn build(color: Vector3<f32>, position: Vector3<i32>) -> (Vec<BlockVertex>, Vec<u32>) {
+    pub fn build(
+        color: Vector3<f32>,
+        position: Vector3<i32>,
+        faces: HashSet<BlockFace>,
+    ) -> (Vec<BlockVertex>, Vec<u32>) {
         let s = 1.0 / 2.0;
         let color: [f32; 3] = color.into();
 
@@ -51,39 +66,68 @@ impl Block {
         let pos8 = [position.x + s, position.y + s, position.z - s];
 
         #[cfg_attr(rustfmt, rustfmt_skip)]
-        let v_data = [
-            BlockVertex::new(pos1, color, [0.0, 0.0, 1.0]),
-            BlockVertex::new(pos2, color, [0.0, 0.0, 1.0]),
-            BlockVertex::new(pos4, color, [0.0, 0.0, 1.0]),
-            BlockVertex::new(pos3, color, [0.0, 0.0, 1.0]),
+        let mut v_data = Vec::new();
+        for face in &faces {
+            match face {
+                BlockFace::North => v_data.append(
+                    &mut [
+                        BlockVertex::new(pos6, color, [1.0, 0.0, 0.0]),
+                        BlockVertex::new(pos8, color, [1.0, 0.0, 0.0]),
+                        BlockVertex::new(pos4, color, [1.0, 0.0, 0.0]),
+                        BlockVertex::new(pos2, color, [1.0, 0.0, 0.0]),
+                    ]
+                    .to_vec(),
+                ),
+                BlockFace::South => v_data.append(
+                    &mut [
+                        BlockVertex::new(pos1, color, [-1.0, 0.0, 0.0]),
+                        BlockVertex::new(pos3, color, [-1.0, 0.0, 0.0]),
+                        BlockVertex::new(pos7, color, [-1.0, 0.0, 0.0]),
+                        BlockVertex::new(pos5, color, [-1.0, 0.0, 0.0]),
+                    ]
+                    .to_vec(),
+                ),
+                BlockFace::East => v_data.append(
+                    &mut [
+                        BlockVertex::new(pos1, color, [0.0, 0.0, 1.0]),
+                        BlockVertex::new(pos2, color, [0.0, 0.0, 1.0]),
+                        BlockVertex::new(pos4, color, [0.0, 0.0, 1.0]),
+                        BlockVertex::new(pos3, color, [0.0, 0.0, 1.0]),
+                    ]
+                    .to_vec(),
+                ),
+                BlockFace::West => v_data.append(
+                    &mut [
+                        BlockVertex::new(pos7, color, [0.0, 0.0, -1.0]),
+                        BlockVertex::new(pos8, color, [0.0, 0.0, -1.0]),
+                        BlockVertex::new(pos6, color, [0.0, 0.0, -1.0]),
+                        BlockVertex::new(pos5, color, [0.0, 0.0, -1.0]),
+                    ]
+                    .to_vec(),
+                ),
+                BlockFace::Top => v_data.append(
+                    &mut [
+                        BlockVertex::new(pos8, color, [0.0, 1.0, 0.0]),
+                        BlockVertex::new(pos7, color, [0.0, 1.0, 0.0]),
+                        BlockVertex::new(pos3, color, [0.0, 1.0, 0.0]),
+                        BlockVertex::new(pos4, color, [0.0, 1.0, 0.0]),
+                    ]
+                    .to_vec(),
+                ),
+                BlockFace::Bottom => v_data.append(
+                    &mut [
+                        BlockVertex::new(pos2, color, [0.0, -1.0, 0.0]),
+                        BlockVertex::new(pos1, color, [0.0, -1.0, 0.0]),
+                        BlockVertex::new(pos5, color, [0.0, -1.0, 0.0]),
+                        BlockVertex::new(pos6, color, [0.0, -1.0, 0.0]),
+                    ]
+                    .to_vec(),
+                ),
+                _ => {}
+            }
+        }
 
-            BlockVertex::new(pos7, color, [0.0, 0.0, -1.0]),
-            BlockVertex::new(pos8, color, [0.0, 0.0, -1.0]),
-            BlockVertex::new(pos6, color, [0.0, 0.0, -1.0]),
-            BlockVertex::new(pos5, color, [0.0, 0.0, -1.0]),
-
-            BlockVertex::new(pos6, color, [1.0, 0.0, 0.0]),
-            BlockVertex::new(pos8, color, [1.0, 0.0, 0.0]),
-            BlockVertex::new(pos4, color, [1.0, 0.0, 0.0]),
-            BlockVertex::new(pos2, color, [1.0, 0.0, 0.0]),
-
-            BlockVertex::new(pos1, color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new(pos3, color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new(pos7, color, [-1.0, 0.0, 0.0]),
-            BlockVertex::new(pos5, color, [-1.0, 0.0, 0.0]),
-
-            BlockVertex::new(pos8, color, [0.0, 1.0, 0.0]),
-            BlockVertex::new(pos7, color, [0.0, 1.0, 0.0]),
-            BlockVertex::new(pos3, color, [0.0, 1.0, 0.0]),
-            BlockVertex::new(pos4, color, [0.0, 1.0, 0.0]),
-
-            BlockVertex::new(pos2, color, [0.0, -1.0, 0.0]),
-            BlockVertex::new(pos1, color, [0.0, -1.0, 0.0]),
-            BlockVertex::new(pos5, color, [0.0, -1.0, 0.0]),
-            BlockVertex::new(pos6, color, [0.0, -1.0, 0.0]),
-        ];
-
-        (v_data.to_vec(), INDEX_DATA.to_vec())
+        (v_data, INDEX_DATA.to_vec())
     }
 }
 
