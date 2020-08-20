@@ -1,6 +1,6 @@
 use std::time::Duration;
 use wgpu_glyph::{Section, Text};
-use winit::event::{KeyboardInput, WindowEvent};
+use winit::event::{KeyboardInput, VirtualKeyCode, WindowEvent};
 
 use crate::player::Player;
 use crate::render::{
@@ -64,12 +64,11 @@ impl World {
                 label: Some("uniform_bind_group_layout"),
             });
 
-        let mut block_chunk = Chunk::new(0, (0, 0, 0).into());
+        let mut block_chunk = Chunk::new(0, (0, 1, 0).into());
         block_chunk.insert_block(Block::new(0), (7, 3, 7).into());
         block_chunk.insert_block(Block::new(0), (8, 3, 7).into());
         block_chunk.insert_block(Block::new(0), (6, 3, 7).into());
-        block_chunk.build_mesh(&graphics.device);
-        let mut chunks = ChunkManager::default(&graphics.device);
+        let mut chunks = ChunkManager::default(10);
         chunks.add_chunk(block_chunk);
 
         let vs_src = include_str!("../shaders/shader.vert");
@@ -125,7 +124,9 @@ impl World {
                         ..
                     },
                 ..
-            } => self.player.process_keys(key, state),
+            } => match key {
+                _ => self.player.process_keys(key, state),
+            },
             WindowEvent::CursorMoved { position, .. } => {
                 self.player.process_mouse(position, width, height);
                 false
@@ -161,6 +162,8 @@ impl Render for World {
         );
 
         graphics.queue.submit(&[encoder.finish()]);
+
+        self.chunks.update(&self.player.camera, &graphics.device);
         self.text.update_debug(&self.player);
     }
 

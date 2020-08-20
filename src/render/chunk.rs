@@ -1,18 +1,34 @@
 use cgmath::Vector3;
 use std::collections::{HashMap, HashSet};
 
-use super::block::{Block, BlockFace};
+use super::{
+    block::{Block, BlockFace},
+    camera::Camera,
+};
 
-const CHUNK_SIZE: usize = 16;
+pub const CHUNK_SIZE: usize = 16;
 const CHUNK_3D_SIZE: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
+const MAX_REBUILD_FRAME: usize = 2;
+
+type ChunkPosition = Vector3<i32>;
+
 pub struct ChunkManager {
-    chunks: HashMap<Vector3<i32>, Chunk>,
+    // Main list:
+    chunks: HashMap<ChunkPosition, Chunk>,
+
+    pub rebuild: HashSet<ChunkPosition>,
+
+    // The list of chunks to be rendered
+    render: HashSet<ChunkPosition>,
+
+    render_dist: u16,
+    old_chunk_pos: Option<Vector3<i32>>,
 }
 
 pub struct Chunk {
     id: usize,
-    pub position: Vector3<i32>,
+    pub position: ChunkPosition,
     pub is_active: bool,
     pub blocks: [Option<Block>; CHUNK_3D_SIZE],
     pub mesh: Option<ChunkMesh>,
@@ -25,51 +41,144 @@ pub struct ChunkMesh {
 }
 
 impl ChunkManager {
-    pub fn new() -> Self {
+    pub fn new(chunks: HashMap<ChunkPosition, Chunk>) -> Self {
         Self {
-            chunks: HashMap::new(),
+            chunks,
+            rebuild: HashSet::new(),
+            render: HashSet::new(),
+            render_dist: 2,
+            old_chunk_pos: None,
         }
     }
 
-    pub fn default(device: &wgpu::Device) -> Self {
+    pub fn default(width: i32) -> Self {
         let mut chunks = HashMap::new();
-        for x in -1..2 {
-            for z in -1..2 {
-                let pos = Vector3::new(x, -1, z);
-                chunks.insert(pos, Chunk::new(0, pos));
+        for x in (-width / 2)..((width / 2) + 1) {
+            for z in (-width / 2)..((width / 2) + 1) {
+                let pos = Vector3::new(x, 0, z);
+                chunks.insert(pos, Chunk::full(0, pos));
             }
         }
-        for x in 0..16 {
-            for y in 0..16 {
-                for z in 0..16 {
-                    for (_, chunk) in chunks.iter_mut() {
-                        chunk.insert_block(Block::new(0), Vector3::new(x, y, z));
+
+        Self::new(chunks)
+    }
+
+    pub fn update(&mut self, camera: &Camera, device: &wgpu::Device) {
+        let camera_chunk_pos: Vector3<i32> = (
+            if camera.position.x.is_sign_positive() {
+                ((camera.position.x + 8.0) / 16.0).floor() as i32
+            } else {
+                ((camera.position.x - 8.0) / 16.0).ceil() as i32
+            },
+            if camera.position.y.is_sign_positive() {
+                ((camera.position.y) / 16.0).floor() as i32
+            } else {
+                ((camera.position.y) / 16.0).ceil() as i32
+            },
+            if camera.position.z.is_sign_positive() {
+                ((camera.position.z + 8.0) / 16.0).floor() as i32
+            } else {
+                ((camera.position.z - 8.0) / 16.0).ceil() as i32
+            },
+        )
+            .into();
+
+        let old_chunk_pos = if let Some(op) = self.old_chunk_pos {
+            op
+        } else {
+            Vector3::new(
+                camera_chunk_pos.x,
+                camera_chunk_pos.y - 1,
+                camera_chunk_pos.z,
+            )
+        };
+
+        // Add chunks that are within the current render distance
+        let mut new_render = HashSet::new();
+        let render_dist = self.render_dist as i32;
+        if old_chunk_pos != camera_chunk_pos {
+            for x in (camera_chunk_pos.x - render_dist)..(camera_chunk_pos.x + render_dist + 1) {
+                for y in
+                    (camera_chunk_pos.y - render_dist).max(0)..(camera_chunk_pos.y + render_dist)
+                {
+                    for z in
+                        (camera_chunk_pos.z - render_dist)..(camera_chunk_pos.z + render_dist + 1)
+                    {
+                        let position = Vector3::new(x, y, z);
+
+                        if let Some(chunk) = self.get_chunk(&position.into()) {
+                            if let None = chunk.mesh {
+                                self.rebuild.insert(position);
+                            }
+                        }
+                        if self.chunks.contains_key(&position) {
+                            new_render.insert(position);
+                        }
                     }
                 }
             }
+            self.render = new_render;
         }
-        for (_, chunk) in chunks.iter_mut() {
-            chunk.build_mesh(device);
+
+        self.old_chunk_pos = Some(camera_chunk_pos);
+
+        self.rebuild_chunks(device);
+    }
+
+    pub fn rebuild_chunks(&mut self, device: &wgpu::Device) {
+        // Rebuild the mesh of chunks that were modified
+        let positions = self.rebuild.clone();
+
+        let mut rebuilt = 0;
+        for position in positions {
+            if rebuilt >= MAX_REBUILD_FRAME {
+                break;
+            }
+            if let Some(chunk) = self.get_chunk_mut(&position) {
+                chunk.build_mesh(device);
+                rebuilt += 1;
+            }
+            self.rebuild.remove(&position);
         }
-        Self { chunks }
     }
 
     pub fn add_chunk(&mut self, chunk: Chunk) {
+        // Prevent overwriting
+        if self.chunks.contains_key(&chunk.position) {
+            return;
+        }
+
         self.chunks.insert(chunk.position, chunk);
     }
 
-    pub fn get_chunk(&self, position: &Vector3<i32>) -> Option<&Chunk> {
+    pub fn get_chunk(&self, position: &ChunkPosition) -> Option<&Chunk> {
         self.chunks.get(&position)
+    }
+    pub fn get_chunk_mut(&mut self, position: &ChunkPosition) -> Option<&mut Chunk> {
+        self.chunks.get_mut(&position)
     }
 }
 
 impl Chunk {
-    pub fn new(id: usize, position: Vector3<i32>) -> Self {
+    pub fn new(id: usize, position: ChunkPosition) -> Self {
         let blocks: [Option<Block>; CHUNK_3D_SIZE] = [None; CHUNK_3D_SIZE];
         Self {
             id,
             position,
-            is_active: true,
+            is_active: false,
+            blocks,
+            mesh: None,
+        }
+    }
+
+    pub fn full(id: usize, position: ChunkPosition) -> Self {
+        let block = Block::new(0);
+        let blocks: [Option<Block>; CHUNK_3D_SIZE] = [Some(block); CHUNK_3D_SIZE];
+
+        Self {
+            id,
+            position,
+            is_active: false,
             blocks,
             mesh: None,
         }
@@ -146,12 +255,16 @@ impl Chunk {
             }
         }
 
-        let vertex_buffer = device
-            .create_buffer_with_data(bytemuck::cast_slice(&vertices), wgpu::BufferUsage::VERTEX);
-        let index_buffer = device
-            .create_buffer_with_data(bytemuck::cast_slice(&indices), wgpu::BufferUsage::INDEX);
+        self.is_active = true;
 
         if !vertices.is_empty() && !indices.is_empty() {
+            let vertex_buffer = device.create_buffer_with_data(
+                bytemuck::cast_slice(&vertices),
+                wgpu::BufferUsage::VERTEX,
+            );
+            let index_buffer = device
+                .create_buffer_with_data(bytemuck::cast_slice(&indices), wgpu::BufferUsage::INDEX);
+
             self.mesh = Some(ChunkMesh {
                 vertex_buffer,
                 index_buffer,
@@ -172,6 +285,20 @@ impl Chunk {
             let index = ((x * CHUNK_SIZE + y) * CHUNK_SIZE) + z;
             if self.blocks[index].is_none() {
                 self.blocks[index] = Some(block);
+            }
+        }
+    }
+
+    pub fn remove_block(&mut self, position: Vector3<usize>) {
+        let x = position.x;
+        let y = position.y;
+        let z = position.z;
+
+        let limit = CHUNK_SIZE - 1;
+        if x <= limit && y <= limit && z <= limit {
+            let index = ((x * CHUNK_SIZE + y) * CHUNK_SIZE) + z;
+            if self.blocks[index].is_some() {
+                self.blocks[index] = None;
             }
         }
     }
@@ -212,12 +339,15 @@ where
     }
 
     fn draw_chunks(&mut self, chunk_manager: &'b ChunkManager, uniforms: &'b wgpu::BindGroup) {
-        for (_, chunk) in &chunk_manager.chunks {
-            if !chunk.is_active {
+        for chunk_position in &chunk_manager.render {
+            let chunk: Option<&'b Chunk> = chunk_manager.get_chunk(chunk_position);
+
+            if chunk.is_none() {
                 continue;
             }
-            if let Some(mesh) = &chunk.mesh {
-                self.draw_mesh(&mesh, uniforms);
+
+            if let Some(mesh) = &chunk.unwrap().mesh {
+                self.draw_mesh(mesh, uniforms);
             }
         }
     }

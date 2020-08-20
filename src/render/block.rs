@@ -55,7 +55,13 @@ impl Block {
         let s = 1.0 / 2.0;
         let color: [f32; 3] = color.into();
 
-        let position = Vector3::new(position.x as f32, position.y as f32, position.z as f32);
+        use super::chunk::CHUNK_SIZE;
+        let offset = (CHUNK_SIZE / 2) as i32;
+        let position = Vector3::new(
+            (position.x - offset) as f32,
+            position.y as f32,
+            (position.z - offset) as f32,
+        );
         let pos1 = [position.x - s, position.y - s, position.z + s];
         let pos2 = [position.x + s, position.y - s, position.z + s];
         let pos3 = [position.x - s, position.y + s, position.z + s];
@@ -123,7 +129,6 @@ impl Block {
                     ]
                     .to_vec(),
                 ),
-                _ => {}
             }
         }
 
