@@ -68,8 +68,34 @@ impl World {
         block_chunk.insert_block(Block::new(0), (7, 3, 7).into());
         block_chunk.insert_block(Block::new(0), (8, 3, 7).into());
         block_chunk.insert_block(Block::new(0), (6, 3, 7).into());
-        let mut chunks = ChunkManager::default(10);
+        block_chunk.insert_block(Block::new(0), (6, 0, 7).into());
+        block_chunk.insert_block(Block::new(0), (7, 0, 7).into());
+        block_chunk.insert_block(Block::new(0), (8, 0, 7).into());
+        block_chunk.insert_block(Block::new(0), (7, 1, 7).into());
+        block_chunk.insert_block(Block::new(0), (6, 0, 8).into());
+        block_chunk.insert_block(Block::new(0), (8, 0, 8).into());
+        let mut chunks = ChunkManager::default(20);
         chunks.add_chunk(block_chunk);
+        chunks
+            .get_chunk_mut(&(0, 0, 0).into())
+            .unwrap()
+            .remove_block((0, 15, 0).into());
+        chunks
+            .get_chunk_mut(&(0, 0, 0).into())
+            .unwrap()
+            .remove_block((8, 15, 8).into());
+        chunks
+            .get_chunk_mut(&(0, 0, 0).into())
+            .unwrap()
+            .remove_block((8, 14, 8).into());
+        chunks
+            .get_chunk_mut(&(0, 0, 0).into())
+            .unwrap()
+            .remove_block((8, 15, 9).into());
+        chunks
+            .get_chunk_mut(&(0, 0, 0).into())
+            .unwrap()
+            .remove_block((9, 15, 10).into());
 
         let vs_src = include_str!("../shaders/shader.vert");
         let fs_src = include_str!("../shaders/shader.frag");

@@ -1,10 +1,7 @@
 use cgmath::Vector3;
 use std::collections::{HashMap, HashSet};
 
-use super::{
-    block::{Block, BlockFace},
-    camera::Camera,
-};
+use super::{block::Block, camera::Camera};
 
 pub const CHUNK_SIZE: usize = 16;
 const CHUNK_3D_SIZE: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
@@ -15,7 +12,7 @@ type ChunkPosition = Vector3<i32>;
 
 pub struct ChunkManager {
     // Main list:
-    chunks: HashMap<ChunkPosition, Chunk>,
+    pub chunks: HashMap<ChunkPosition, Chunk>,
 
     pub rebuild: HashSet<ChunkPosition>,
 
@@ -135,7 +132,7 @@ impl ChunkManager {
                 break;
             }
             if let Some(chunk) = self.get_chunk_mut(&position) {
-                chunk.build_mesh(device);
+                chunk.greedy_mesh(device);
                 rebuilt += 1;
             }
             self.rebuild.remove(&position);
@@ -184,77 +181,122 @@ impl Chunk {
         }
     }
 
-    pub fn build_mesh(&mut self, device: &wgpu::Device) {
+    pub fn greedy_mesh(&mut self, device: &wgpu::Device) {
+        // Adapted from https://github.com/roboleary/GreedyMesh
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
-        let mut offset: u32 = 0;
-        for (i, block) in self.blocks.iter().enumerate() {
-            if let Some(b) = block {
-                if !b.is_active {
-                    continue;
+        let mut offset = 0;
+        for d in 0..3 {
+            let u = (d + 1) % 3;
+            let v = (d + 2) % 3;
+            let mut x: [f32; 3] = [0.0; 3];
+
+            // Determines the direction
+            let mut q: [f32; 3] = [0.0; 3];
+            q[d] = 1.0;
+
+            let size = CHUNK_SIZE as f32;
+            let mut mask: [bool; CHUNK_SIZE * CHUNK_SIZE] = [false; CHUNK_SIZE * CHUNK_SIZE];
+            x[d] = -1.0;
+            while x[d] < size {
+                // Compute the mask.
+                x[v] = 0.0;
+                x[u] = 0.0;
+                let mut n = 0;
+                while x[v] < size {
+                    while x[u] < size {
+                        let block_current = if 0.0 <= x[d] {
+                            self.block_active((x[0] as usize, x[1] as usize, x[2] as usize).into())
+                        } else {
+                            false
+                        };
+                        let block_compare = if x[d] < CHUNK_SIZE as f32 - 1.0 {
+                            self.block_active(
+                                (
+                                    (x[0] + q[0]) as usize,
+                                    (x[1] + q[1]) as usize,
+                                    (x[2] + q[2]) as usize,
+                                )
+                                    .into(),
+                            )
+                        } else {
+                            false
+                        };
+                        mask[n] = block_current != block_compare;
+                        n += 1;
+                        x[u] += 1.0;
+                    }
+                    x[v] += 1.0;
+                    x[u] = 0.0;
                 }
+                x[d] += 1.0;
+                n = 0;
 
-                let z = (i % CHUNK_SIZE) as usize;
-                let y = ((i / CHUNK_SIZE) % CHUNK_SIZE) as usize;
-                let x = (i / (CHUNK_SIZE * CHUNK_SIZE)) as usize;
+                let mut i;
+                for j in 0..CHUNK_SIZE {
+                    i = 0;
+                    while i < CHUNK_SIZE {
+                        if mask[n] {
+                            // Calculate width and height.
+                            let mut w = 1;
+                            while (i + w) < CHUNK_SIZE && mask[n + w] {
+                                w += 1;
+                            }
 
-                let mut faces = HashSet::new();
-                faces.insert(BlockFace::North);
-                faces.insert(BlockFace::South);
-                faces.insert(BlockFace::East);
-                faces.insert(BlockFace::West);
-                faces.insert(BlockFace::Top);
-                faces.insert(BlockFace::Bottom);
+                            let mut h = 1;
+                            'outer: while (j + h) < CHUNK_SIZE {
+                                for k in 0..w {
+                                    if !mask[n + k + h * CHUNK_SIZE] {
+                                        break 'outer;
+                                    }
+                                }
+                                h += 1;
+                            }
 
-                if x > 0 {
-                    if self.block_active((x + 1, y, z).into()) {
-                        faces.remove(&BlockFace::North);
-                    }
-                    if x < CHUNK_SIZE - 1 && self.block_active((x - 1, y, z).into()) {
-                        faces.remove(&BlockFace::South);
+                            x[u] = i as f32;
+                            x[v] = j as f32;
+
+                            let mut du: [f32; 3] = [0.0; 3];
+                            du[u] = w as f32;
+                            let mut dv: [f32; 3] = [0.0; 3];
+                            dv[v] = h as f32;
+
+                            let chunk_pos = self.position * CHUNK_SIZE as i32;
+                            let mut quad = Block::quad(
+                                Vector3::new(du[0], du[1], du[2]),
+                                Vector3::new(dv[0], dv[1], dv[2]),
+                                Vector3::new(
+                                    x[0] as i32 + chunk_pos.x,
+                                    x[1] as i32 + chunk_pos.y,
+                                    x[2] as i32 + chunk_pos.z,
+                                ),
+                                (q[0], q[1], q[2]).into(),
+                            );
+
+                            vertices.append(&mut quad.0);
+                            for val in &mut quad.1 {
+                                *val += offset;
+                            }
+                            offset += 4;
+                            indices.append(&mut quad.1);
+
+                            for l in 0..h {
+                                for k in 0..w {
+                                    mask[n + k + l * CHUNK_SIZE] = false;
+                                }
+                            }
+
+                            i += w;
+                            n += w;
+                        } else {
+                            i += 1;
+                            n += 1;
+                        }
                     }
                 }
-                if y > 0 {
-                    if self.block_active((x, y + 1, z).into()) {
-                        faces.remove(&BlockFace::Top);
-                    }
-                    if y < CHUNK_SIZE - 1 && self.block_active((x, y - 1, z).into()) {
-                        faces.remove(&BlockFace::Bottom);
-                    }
-                }
-                if z > 0 {
-                    if self.block_active((x, y, z + 1).into()) {
-                        faces.remove(&BlockFace::East);
-                    }
-                    if z < CHUNK_SIZE - 1 && self.block_active((x, y, z - 1).into()) {
-                        faces.remove(&BlockFace::West);
-                    }
-                }
-
-                let chunk_pos = self.position * CHUNK_SIZE as i32;
-                let (mut v_data, mut i_data) = Block::build(
-                    (0.8, 0.0, 0.5).into(),
-                    (
-                        x as i32 + chunk_pos.x,
-                        y as i32 + chunk_pos.y,
-                        z as i32 + chunk_pos.z,
-                    )
-                        .into(),
-                    faces,
-                );
-
-                for val in &mut i_data {
-                    *val += offset as u32;
-                }
-
-                vertices.append(&mut v_data);
-                indices.append(&mut i_data);
-
-                offset += 24;
             }
         }
-
         self.is_active = true;
 
         if !vertices.is_empty() && !indices.is_empty() {
