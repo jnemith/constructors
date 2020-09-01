@@ -32,8 +32,8 @@ pub struct Player {
 impl Player {
     pub fn new(camera: Camera) -> Self {
         Self {
-            speed: 5.0,
-            sensitivity: 0.1,
+            speed: 8.0,
+            sensitivity: 0.05,
             camera,
             actions: Vec::new(),
             mouse_d: (0.0, 0.0),
@@ -68,9 +68,8 @@ impl Player {
                 Action::Backward => self.camera.position -= forward * self.speed * dt,
                 Action::Left => self.camera.position -= right * self.speed * dt,
                 Action::Right => self.camera.position += right * self.speed * dt,
-                Action::Up => self.camera.position.y += self.speed / 2.0 * dt,
-                Action::Down => self.camera.position.y -= self.speed / 2.0 * dt,
-                _ => {}
+                Action::Up => self.camera.position.y += self.speed * dt,
+                Action::Down => self.camera.position.y -= self.speed * dt,
             }
         }
 

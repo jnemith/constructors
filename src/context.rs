@@ -56,11 +56,11 @@ impl Context {
         log::info!("Initializing Graphics");
         let graphics = Graphics::new(size, adapter, sc_desc, swap_chain, device, queue);
 
-        let camera = Camera::new((0.0, 3.0, 5.0), Deg(-90.0), Deg(-10.0));
+        let camera = Camera::new((-13.0, 16.0, -12.0), Deg(-90.0), Deg(-10.0));
         let projection = Projection::new(
             graphics.sc_desc.width,
             graphics.sc_desc.height,
-            Deg(45.0),
+            Deg(70.0),
             0.1,
             100.0,
         );
